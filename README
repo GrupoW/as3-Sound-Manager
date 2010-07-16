@@ -1,0 +1,42 @@
+Works with the latest version of TweenLite.
+
+Useage 1:
+
+instead of using:
+
+import com.reintroducing.sound.SoundManager;
+import flash.utils.getDefinitionByName;
+ 
+var manageSound:SoundManager=SoundManager.getInstance();
+manageSound.addLibrarySound(getDefinitionByName("loop"), "loop");
+manageSound.playSound("loop", 0, 0, 999);
+
+just do this:
+
+import com.reintroducing.sound.SoundManager;
+ 
+var manageSound:SoundManager=SoundManager.getInstance();
+manageSound.addSound("loop");
+manageSound.playSound("loop", 0, 0, 999);
+
+
+addMultiplesSounds functionality
+
+package
+{
+	public class Sounds
+	{
+		static public const LOOP_SOUND = "LoopSound";
+		static public const CLICK_SOUND01 = "ClickSound01";
+		static public const CLICK_SOUND02 = "ClickSound02";
+	}
+}
+
+
+import com.reintroducing.sound.SoundManager;
+ 
+var manageSound:SoundManager=SoundManager.getInstance();
+manageSound.addMultiplesSounds([Sounds.LOOP_SOUND, Sounds.CLICK_SOUND01, Sounds.CLICK_SOUND02]);
+manageSound.playSound(Sounds.LOOP_SOUND, 0, 0, 999);
+manageSound.playSound(Sounds.CLICK_SOUND01);
+
