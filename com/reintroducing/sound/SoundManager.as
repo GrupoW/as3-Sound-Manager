@@ -1,31 +1,75 @@
-﻿package com.reintroducing.sound
+package com.reintroducing.sound
 {
+	import flash.utils.getDefinitionByName;
+
+	import com.reintroducing.events.SoundManagerEvent;
+
+	import flash.events.Event;
+	import flash.events.EventDispatcher;
+	import flash.events.IOErrorEvent;
+	import flash.events.ProgressEvent;
 	import flash.media.Sound;
-	import flash.media.SoundChannel;
 	import flash.media.SoundLoaderContext;
-	import flash.media.SoundTransform;
 	import flash.net.URLRequest;
 	import flash.utils.Dictionary;
-	import flash.utils.getDefinitionByName;
 	import flash.utils.getQualifiedClassName;
 	
-	import com.greensock.TweenLite;
-	import com.greensock.plugins.TweenPlugin;
-	import com.greensock.plugins.VolumePlugin;
-	
-		
 	/**
 	 * The SoundManager is a singleton that allows you to have various ways to control sounds in your project.
 	 * <p />
-	 * The SoundManager can load external or library sounds, pause/mute/stop/control volume for one or more sounds at a time, 
-	 * fade sounds up or down, and allows additional control to sounds not readily available through the default classes.
+	 * The SoundManager can load external sounds, play sounds loaded through an asset loader, or library sounds, 
+	 * pause/mute/stop/control volume for one or more sounds at a time, fade sounds up or down, and allows additional 
+	 * control to sounds not readily available through the default classes.
 	 * <p />
-	 * This class is dependent on TweenLite (http://www.tweenlite.com) to aid in easily fading the volume of the sound.
+	 * The supplementary SoundItem class is dependent on TweenLite (http://www.tweenlite.com) to aid in easily fading the volume of the sound.
 	 * 
 	 * @author Matt Przybylski [http://www.reintroducing.com]
-	 * @version 1.0
+	 * @version 1.4
+	 * 
+	 * VERSION HISTORY:
+	 *
+	 * 1.4
+	 * 		- General refactoring.
+	 * 		
+	 * 		- Added areAllMuted getter.  Fixed bug where if muteAllSounds() was called, playing a sound after that caused it
+	 * 		  to play rather than stay muted.
+	 * 		  
+	 * 		- Fixed bug where calling muteAllSounds() didn't mute sounds that were being tweened at the same time (thanks Milan Orszagh).
+	 * 		
+	 * 		- Reverted to TweenLite for default fading behavior.
+	 * 		
+	 * 		- Reconfigured SoundItem to not extend sound and be its own object so that we can add preloaded sounds without hassle.
+	 * 		
+	 * 		- Added addPreloadedSound() method to add sounds that are loaded by an external loading system (thanks Nuajan for the idea).
+	 * 		
+	 * 		- Renamed events being fired by SoundManagerEvent to be more appropriate with what's happening.
+	 * 		
+	 * 		- Added SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE event.
+	 * 		
+	 * 		- Added a destroy() method to SoundItem to clean up for garbage collection.
+	 *
+	 * 1.3
+	 * 		- Added the new SoundItem class so that each sound is strongly typed rather than being a generic Object.
+	 * 		  When using sounds in your library, your sound MUST extend com.reintroducing.sound.SoundItem and NOT
+	 * 		  flash.media.Sound.  Set this as the Base class in the properties panel for each library sound.
+	 * 		
+	 * 		- Added the getSoundItem() method and removed getSoundObject() method in favor of using the new SoundItem class.
+	 * 		
+	 * 		- Added the SoundManagerEvent and set the manager to fire off appropriate events.
+	 * 		
+	 * 		- Changed to TweenMax for default fading behavior.
+	 * 		 
+	 * 1.2
+	 * 		- Removed ability to play the sound again if it is already playing (causes conflict with stopAllSounds). 
+	 * 		  To play the same sound at the same time, add the sound under a differnet name (thanks Yu-Chung Chen).
+	 * 		  
+	 * 		- Fixed bug where playSound() wouldn't play from specified position if the sound was paused (thanks Yu-Chung Chen). 
+	 * 		
+	 * 1.1
+	 * 		- Fixed bug where calling playSound() on a sound that was muted by muteAllSounds() was causing it to play.
+	 * 		  Use unmuteAllSounds() to resume playback of muted sounds.
 	 */
-	public class SoundManager
+	public class SoundManager extends EventDispatcher
 	{
 //- PRIVATE & PROTECTED VARIABLES -------------------------------------------------------------------------
 
@@ -35,6 +79,8 @@
 		
 		private var _soundsDict:Dictionary;
 		private var _sounds:Array;
+		private var _areAllMuted:Boolean;
+		private var _tempExternalSoundItem:SoundItem;
 		
 //- PUBLIC & INTERNAL VARIABLES ---------------------------------------------------------------------------
 		
@@ -42,35 +88,25 @@
 		
 //- CONSTRUCTOR	-------------------------------------------------------------------------------------------
 	
-		public static function getNewNull():SoundManager
-		{
-			SoundManager._allowInstance = true;
-			var _instance:SoundManager = new NullSoundManager();
-			SoundManager._allowInstance = false;				
-			return _instance
-		}
-
 		// singleton instance of SoundManager
 		public static function getInstance():SoundManager 
 		{
-			if (SoundManager._instance == null)
+			if (_instance == null)
 			{
-				SoundManager._allowInstance = true;
-				SoundManager._instance = new SoundManager();
-				SoundManager._allowInstance = false;
+				_allowInstance = true;
+				_instance = new SoundManager();
+				_allowInstance = false;
 			}
 			
-			return SoundManager._instance;
+			return _instance;
 		}
 		
 		public function SoundManager() 
 		{
-			TweenPlugin.activate([VolumePlugin]);
-			
 			this._soundsDict = new Dictionary(true);
-			this._sounds = new Array();
+			this._sounds = [];
 			
-			if (!SoundManager._allowInstance)
+			if (!_allowInstance)
 			{
 				throw new Error("Error: Use SoundManager.getInstance() instead of the new keyword.");
 			}
@@ -78,10 +114,92 @@
 		
 //- PRIVATE & PROTECTED METHODS ---------------------------------------------------------------------------
 		
-		
+		/**
+		 *
+		 */
+		private function registerSound($linkageID:*, $preloadedSound:Sound, $path:String, $name:String, $buffer:Number = 1000, $checkPolicyFile:Boolean = false):Boolean
+		{
+			// check to see if sound already exists by the specified name
+			var len:int = _sounds.length;
+			
+			for (var i:int = 0; i < len; i++)
+			{
+				if ((_sounds[i] as SoundItem).name == $name) return false;
+			}
+			
+			// sound doesn't exist yet, go ahead and create it
+			var si:SoundItem = new SoundItem();
+			
+			if ($linkageID == null)
+			{
+				if ($preloadedSound == null)
+				{
+					// adding external sound
+					si.sound = new Sound(new URLRequest($path), new SoundLoaderContext($buffer, $checkPolicyFile));
+					si.sound.addEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
+					si.sound.addEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
+					si.sound.addEventListener(Event.COMPLETE, onSoundLoadComplete);
+					
+					_tempExternalSoundItem = si;
+				}
+				else
+				{
+					// adding a preloaded sound
+					si.sound = $preloadedSound;
+				}
+			}
+			else
+			{
+				// adding library sound
+				si.sound = new $linkageID;
+			}
+			
+			si.name = $name;
+			si.position = 0;
+			si.paused = true;
+			si.volume = (_areAllMuted) ? 0 : 1;
+			si.savedVolume = si.volume;
+			si.startTime = 0;
+			si.loops = 0;
+			si.pausedByAll = false;
+			si.muted = _areAllMuted;
+			si.addEventListener(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, handleSoundPlayComplete);
+			
+			_soundsDict[$name] = si;
+			_sounds.push(si);
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_ADDED, si));
+			
+			return true;
+		}
 		
 //- PUBLIC & INTERNAL METHODS -----------------------------------------------------------------------------
-	
+		
+		/**
+		 * Adds a sound from the library to the sounds dictionary for playing in the future.
+		 * hides the getDefinitionByName call and apply the $linkageID as string identifier of the sound.
+		 * @param $linkageID The class name of the library symbol that was exported for AS
+		 * 
+		 * @return Boolean A boolean value representing if the sound was added successfully
+		 */
+		public function addSound($linkageID:String):Boolean
+		{
+			return registerSound(getDefinitionByName($linkageID), null, "", $linkageID);
+		}
+
+		/**
+		 * Adds multiples sounds from the library to the sounds dictionary.
+		 * 
+		 * @param $collection The array containing each class name of the library symbol that was exported for AS.
+		 * 
+		 */
+		public function addMultiplesSounds($collection:Array):void
+		{
+			for each( var name_str:String in $collection) {
+				addSound(name_str);
+			}
+		}
+		
 		/**
 		 * Adds a sound from the library to the sounds dictionary for playing in the future.
 		 * 
@@ -92,40 +210,7 @@
 		 */
 		public function addLibrarySound($linkageID:*, $name:String):Boolean
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
-			{
-				if (this._sounds[i].name == $name) return false;
-			}
-			
-			var sndObj:Object = new Object();
-			var snd:Sound = new $linkageID;
-			
-			sndObj.name = $name;
-			sndObj.sound = snd;
-			sndObj.channel = new SoundChannel();
-			sndObj.position = 0;
-			sndObj.paused = true;
-			sndObj.volume = 1;
-			sndObj.startTime = 0;
-			sndObj.loops = 0;
-			sndObj.pausedByAll = false;
-			
-			this._soundsDict[$name] = sndObj;
-			this._sounds.push(sndObj);
-			
-			return true;
-		}
-			
-		public function addSound($id:String):Boolean
-		{
-			return addLibrarySound(getDefinitionByName($id), $id);
-		}
-		
-		public function addMultiplesSounds(value:Array):void
-		{
-			for each( var name_str:String in value) {
-				addSound(name_str);
-			}
+			return registerSound($linkageID, null, "", $name);
 		}
 		
 		/**
@@ -140,28 +225,20 @@
 		 */
 		public function addExternalSound($path:String, $name:String, $buffer:Number = 1000, $checkPolicyFile:Boolean = false):Boolean
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
-			{
-				if (this._sounds[i].name == $name) return false;
-			}
-			
-			var sndObj:Object = new Object();
-			var snd:Sound = new Sound(new URLRequest($path), new SoundLoaderContext($buffer, $checkPolicyFile));
-			
-			sndObj.name = $name;
-			sndObj.sound = snd;
-			sndObj.channel = new SoundChannel();
-			sndObj.position = 0;
-			sndObj.paused = true;
-			sndObj.volume = 1;
-			sndObj.startTime = 0;
-			sndObj.loops = 0;
-			sndObj.pausedByAll = false;
-			
-			this._soundsDict[$name] = sndObj;
-			this._sounds.push(sndObj);
-			
-			return true;
+			return registerSound(null, null, $path, $name, $buffer, $checkPolicyFile);
+		}
+		
+		/**
+		 * Adds a sound that was preloaded by an external library to the sounds dictionary for playing in the future.
+		 * 
+		 * @param $sound The sound object that was preloaded
+		 * @param $name The string identifier of the sound to be used when calling other methods on the sound
+		 * 
+		 * @return Boolean A boolean value representing if the sound was added successfully
+		 */
+		public function addPreloadedSound($sound:Sound, $name:String):Boolean
+		{
+			return registerSound(null, $sound, "", $name);
 		}
 		
 		/**
@@ -173,16 +250,30 @@
 		 */
 		public function removeSound($name:String):void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			var len:int = _sounds.length;
+			var si:SoundItem;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				if (this._sounds[i].name == $name)
+				si = (_sounds[i] as SoundItem);
+				
+				if (si.name == $name)
 				{
-					this._sounds[i] = null;
-					this._sounds.splice(i, 1);
+					si.sound.removeEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
+					si.sound.removeEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
+					si.sound.removeEventListener(Event.COMPLETE, onSoundLoadComplete);
+					si.removeEventListener(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, handleSoundPlayComplete);
+					si.destroy();
+					
+					_sounds.splice(i, 1);
+					
+					break;
 				}
 			}
 			
-			delete this._soundsDict[$name];
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_REMOVED, (_soundsDict[$name] as SoundItem)));
+			
+			delete (_soundsDict[$name] as SoundItem);
 		}
 		
 		/**
@@ -192,42 +283,57 @@
 		 */
 		public function removeAllSounds():void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			var len:int = _sounds.length;
+			var si:SoundItem;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				this._sounds[i] = null;
+				si = (_sounds[i] as SoundItem);
+				si.sound.removeEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
+				si.sound.removeEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
+				si.sound.removeEventListener(Event.COMPLETE, onSoundLoadComplete);
 			}
 			
-			this._sounds = new Array();
-			this._soundsDict = new Dictionary(true);
+			_sounds = [];
+			_soundsDict = new Dictionary(true);
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.REMOVED_ALL));
 		}
 
 		/**
-		 * Plays or resumes a sound from the sound dictionary with the specified name.
+		 * Plays or resumes a sound from the sound dictionary with the specified name.  If the sounds in the dictionary were muted by 
+		 * the muteAllSounds() method, no sounds are played until unmuteAllSounds() is called.
 		 * 
 		 * @param $name The string identifier of the sound to play
 		 * @param $volume A number from 0 to 1 representing the volume at which to play the sound (default: 1)
 		 * @param $startTime A number (in milliseconds) representing the time to start playing the sound at (default: 0)
 		 * @param $loops An integer representing the number of times to loop the sound (default: 0)
+		 * @param $resumeTween A boolean that indicates if a faded sound's volume should resume from the last saved state (default: true)
 		 * 
 		 * @return void
 		 */
-		public function playSound($name:String, $volume:Number = 1, $startTime:Number = 0, $loops:int = 0):void
+		public function playSound($name:String, $volume:Number = 1, $startTime:Number = 0, $loops:int = 0, $resumeTween:Boolean = true):void
 		{
-			var snd:Object = this._soundsDict[$name];
-			snd.volume = $volume;
-			snd.startTime = $startTime;
-			snd.loops = $loops;
-				
-			if (snd.paused)
-			{
-				snd.channel = snd.sound.play(snd.position, snd.loops, new SoundTransform(snd.volume));
-			}
-			else
-			{
-				snd.channel = snd.sound.play($startTime, snd.loops, new SoundTransform(snd.volume));
-			}
+			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			si.play($startTime, $loops, $volume, $resumeTween);
 			
-			snd.paused = false;
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_PLAY_START, si));
+		}
+		
+		/**
+		 * Pauses the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @param $pauseTween A boolean that either pauses the fadeTween or allows it to continue (default: true)
+		 * 
+		 * @return void
+		 */
+		public function pauseSound($name:String, $pauseTween:Boolean = true):void
+		{
+			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			si.pause($pauseTween);
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_PAUSE, si));
 		}
 		
 		/**
@@ -239,53 +345,76 @@
 		 */
 		public function stopSound($name:String):void
 		{
-			var snd:Object = this._soundsDict[$name];
-			snd.paused = true;
-			snd.channel.stop();
-			snd.position = snd.channel.position;
-		}
-		
-		/**
-		 * Pauses the specified sound.
-		 * 
-		 * @param $name The string identifier of the sound
-		 * 
-		 * @return void
-		 */
-		public function pauseSound($name:String):void
-		{
-			var snd:Object = this._soundsDict[$name];
-			snd.paused = true;
-			snd.position = snd.channel.position;
-			snd.channel.stop();
+			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			si.stop();
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_STOP, si));
 		}
 		
 		/**
 		 * Plays all the sounds that are in the sound dictionary.
 		 * 
+		 * @param $resumeTweens A boolean that resumes all unfinished fade tweens (default: true)
 		 * @param $useCurrentlyPlayingOnly A boolean that only plays the sounds which were currently playing before a pauseAllSounds() or stopAllSounds() call (default: false)
 		 * 
 		 * @return void
 		 */
-		public function playAllSounds($useCurrentlyPlayingOnly:Boolean = false):void
+		public function playAllSounds($resumeTweens:Boolean = true, $useCurrentlyPlayingOnly:Boolean = false):void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			var len:int = _sounds.length;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				var id:String = this._sounds[i].name;
+				var id:String = (_sounds[i] as SoundItem).name;
 				
 				if ($useCurrentlyPlayingOnly)
 				{
-					if (this._soundsDict[id].pausedByAll)
+					if ((_soundsDict[id] as SoundItem).pausedByAll)
 					{
-						this._soundsDict[id].pausedByAll = false;
-						this.playSound(id);
+						(_soundsDict[id] as SoundItem).pausedByAll = false;
+						playSound(id, (_soundsDict[id] as SoundItem).volume, 0, 0, $resumeTweens);
 					}
 				}
 				else
 				{
-					this.playSound(id);
+					playSound(id, (_soundsDict[id] as SoundItem).volume, 0, 0, $resumeTweens);
 				}
 			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.PLAY_ALL));
+		}
+		
+		/**
+		 * Pauses all the sounds that are in the sound dictionary.
+		 * 
+		 * @param $pauseTweens A boolean that either pauses each SoundItem's fadeTween or allows them to continue (default: true)
+		 * @param $useCurrentlyPlayingOnly A boolean that only pauses the sounds which are currently playing (default: true)
+		 * 
+		 * @return void
+		 */
+		public function pauseAllSounds($pauseTweens:Boolean = true, $useCurrentlyPlayingOnly:Boolean = true):void
+		{
+			var len:int = _sounds.length;
+			
+			for (var i:int = 0; i < len; i++)
+			{
+				var id:String = (_sounds[i] as SoundItem).name;
+				
+				if ($useCurrentlyPlayingOnly)
+				{
+					if (!(_soundsDict[id] as SoundItem).paused)
+					{
+						(_soundsDict[id] as SoundItem).pausedByAll = true;
+						pauseSound(id, $pauseTweens);
+					}
+				}
+				else
+				{
+					pauseSound(id, $pauseTweens);
+				}
+			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.PAUSE_ALL));
 		}
 		
 		/**
@@ -297,51 +426,27 @@
 		 */
 		public function stopAllSounds($useCurrentlyPlayingOnly:Boolean = true):void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			var len:int = _sounds.length;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				var id:String = this._sounds[i].name;
+				var id:String = (_sounds[i] as SoundItem).name;
 				
 				if ($useCurrentlyPlayingOnly)
 				{
-					if (!this._soundsDict[id].paused)
+					if (!(_soundsDict[id] as SoundItem).paused)
 					{
-						this._soundsDict[id].pausedByAll = true;
-						this.stopSound(id);
+						(_soundsDict[id] as SoundItem).pausedByAll = true;
+						stopSound(id);
 					}
 				}
 				else
 				{
-					this.stopSound(id);
+					stopSound(id);
 				}
 			}
-		}
-		
-		/**
-		 * Pauses all the sounds that are in the sound dictionary.
-		 * 
-		 * @param $useCurrentlyPlayingOnly A boolean that only pauses the sounds which are currently playing (default: true)
-		 * 
-		 * @return void
-		 */
-		public function pauseAllSounds($useCurrentlyPlayingOnly:Boolean = true):void
-		{
-			for (var i:int = 0; i < this._sounds.length; i++)
-			{
-				var id:String = this._sounds[i].name;
-				
-				if ($useCurrentlyPlayingOnly)
-				{
-					if (!this._soundsDict[id].paused)
-					{
-						this._soundsDict[id].pausedByAll = true;
-						this.pauseSound(id);
-					}
-				}
-				else
-				{
-					this.pauseSound(id);
-				}
-			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.STOP_ALL));
 		}
 		
 		/**
@@ -350,14 +455,17 @@
 		 * @param $name The string identifier of the sound
 		 * @param $targVolume The target volume to fade to, between 0 and 1 (default: 0)
 		 * @param $fadeLength The time to fade over, in seconds (default: 1)
+		 * @param $stopOnComplete Added by Danny Miller from K2xL, stops the sound once the fade is done if set to true
 		 * 
 		 * @return void
 		 */
-		public function fadeSound($name:String, $targVolume:Number = 0, $fadeLength:Number = 1):void
+		public function fadeSound($name:String, $targVolume:Number = 0, $fadeLength:Number = 1, $stopOnComplete:Boolean = false):void
 		{
-			var fadeChannel:SoundChannel = this._soundsDict[$name].channel;
+			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			si.addEventListener(SoundManagerEvent.SOUND_ITEM_FADE_COMPLETE, handleFadeComplete);
+			si.fade($targVolume, $fadeLength, $stopOnComplete);
 			
-			TweenLite.to(fadeChannel, $fadeLength, {volume: $targVolume});
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_FADE, si));
 		}
 		
 		/**
@@ -367,12 +475,23 @@
 		 */
 		public function muteAllSounds():void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			_areAllMuted = true;
+			
+			var len:int = _sounds.length;
+			var id:String;
+			var si:SoundItem;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				var id:String = this._sounds[i].name;
+				id = (_sounds[i] as SoundItem).name;
+				si = (_soundsDict[id] as SoundItem);
+				si.savedVolume = si.channel.soundTransform.volume;
+				si.muted = true;
 				
-				this.setSoundVolume(id, 0);
+				setSoundVolume(id, 0);
 			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.MUTE_ALL));
 		}
 		
 		/**
@@ -382,14 +501,22 @@
 		 */
 		public function unmuteAllSounds():void
 		{
-			for (var i:int = 0; i < this._sounds.length; i++)
+			_areAllMuted = false;
+			
+			var len:int = _sounds.length;
+			var id:String;
+			var si:SoundItem;
+			
+			for (var i:int = 0; i < len; i++)
 			{
-				var id:String = this._sounds[i].name;
-				var snd:Object = this._soundsDict[id];
-				var curTransform:SoundTransform = snd.channel.soundTransform;
-				curTransform.volume = snd.volume;
-				snd.channel.soundTransform = curTransform;
+				id = (_sounds[i] as SoundItem).name;
+				si = (_soundsDict[id] as SoundItem);
+				si.muted = false;
+				
+				setSoundVolume(id, si.savedVolume);
 			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.UNMUTE_ALL));
 		}
 		
 		/**
@@ -402,10 +529,7 @@
 		 */
 		public function setSoundVolume($name:String, $volume:Number):void
 		{
-			var snd:Object = this._soundsDict[$name];
-			var curTransform:SoundTransform = snd.channel.soundTransform;
-			curTransform.volume = $volume;
-			snd.channel.soundTransform = curTransform;
+			(_soundsDict[$name] as SoundItem).setVolume($volume);
 		}
 		
 		/**
@@ -417,7 +541,7 @@
 		 */
 		public function getSoundVolume($name:String):Number
 		{
-			return this._soundsDict[$name].channel.soundTransform.volume;
+			return (_soundsDict[$name] as SoundItem).channel.soundTransform.volume;
 		}
 		
 		/**
@@ -429,7 +553,7 @@
 		 */
 		public function getSoundPosition($name:String):Number
 		{
-			return this._soundsDict[$name].channel.position;
+			return (_soundsDict[$name] as SoundItem).channel.position;
 		}
 		
 		/**
@@ -441,19 +565,19 @@
 		 */
 		public function getSoundDuration($name:String):Number
 		{
-			return this._soundsDict[$name].sound.length;
+			return (_soundsDict[$name] as SoundItem).sound.length;
 		}
 		
 		/**
-		 * Gets the sound object of the specified sound.
+		 * Gets the SoundItem instance of the specified sound.
 		 * 
-		 * @param $name The string identifier of the sound
+		 * @param $name The string identifier of the SoundItem
 		 * 
-		 * @return Sound The sound object
+		 * @return SoundItem The SoundItem
 		 */
-		public function getSoundObject($name:String):Sound
+		public function getSoundItem($name:String):SoundItem
 		{
-			return this._soundsDict[$name].sound;
+			return (_soundsDict[$name] as SoundItem);
 		}
 		
 		/**
@@ -465,7 +589,7 @@
 		 */
 		public function isSoundPaused($name:String):Boolean
 		{
-			return this._soundsDict[$name].paused;
+			return (_soundsDict[$name] as SoundItem).paused;
 		}
 		
 		/**
@@ -477,23 +601,91 @@
 		 */
 		public function isSoundPausedByAll($name:String):Boolean
 		{
-			return this._soundsDict[$name].pausedByAll;
+			return (_soundsDict[$name] as SoundItem).pausedByAll;
 		}
-
+	
 //- EVENT HANDLERS ----------------------------------------------------------------------------------------
 	
+		/**
+		 * Dispatched when an external sound can't load and produces an error.
+		 */
+		private function onSoundLoadError($evt:IOErrorEvent):void
+		{
+			_tempExternalSoundItem = null;
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_LOAD_ERROR));
+		}
 		
-
-//- GETTERS & SETTERS -------------------------------------------------------------------------------------
+		/**
+		 * Dispatched when an external sound is loading.
+		 */
+		private function onSoundLoadProgress($evt:ProgressEvent):void
+		{
+			var percent:uint = Math.round(100 * ($evt.bytesLoaded / $evt.bytesTotal));
+			var snd:Sound = ($evt.target as Sound);
+			var duration:Number = 0;
+			
+			if (snd && snd.length > 0)
+			{
+			    duration = ((snd.bytesTotal / (snd.bytesLoaded / snd.length)) * .001);
+			}
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_LOAD_PROGRESS, _tempExternalSoundItem, duration, percent));
+		}
+		
+		/**
+		 * Dispatched when an external sound is fully loaded.
+		 */
+		private function onSoundLoadComplete($evt:Event):void
+		{
+			var snd:Sound = ($evt.target as Sound);
+			var duration:Number = (snd.length * .001);
+			
+			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_LOAD_COMPLETE, _tempExternalSoundItem, duration));
+			
+			_tempExternalSoundItem = null;
+		}
+		
+		/**
+		 * Dispatched once a sound's fadeTween is completed if the sound was called to fade.
+		 */
+		private function handleFadeComplete($evt:SoundManagerEvent):void
+		{
+			dispatchEvent($evt);
+			
+			var si:SoundItem = $evt.soundItem;
+			si.removeEventListener(SoundManagerEvent.SOUND_ITEM_FADE_COMPLETE, handleFadeComplete);
+		}
+		
+		/**
+		 * Dispatched when a SoundItem has finished playback.
+		 */
+		private function handleSoundPlayComplete($evt:SoundManagerEvent):void
+		{
+			dispatchEvent($evt);
+		}
 	
+//- GETTERS & SETTERS -------------------------------------------------------------------------------------
+		
+		/**
+		 * 
+		 */
 		public function get sounds():Array
 		{
-		    return this._sounds;
+		    return _sounds;
+		}
+		
+		/**
+		 *
+		 */
+		public function get areAllMuted():Boolean
+		{
+		    return _areAllMuted;
 		}
 	
 //- HELPERS -----------------------------------------------------------------------------------------------
 	
-		public function toString():String
+		override public function toString():String
 		{
 			return getQualifiedClassName(this);
 		}
