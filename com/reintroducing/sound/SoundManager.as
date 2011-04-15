@@ -315,8 +315,14 @@ package com.reintroducing.sound
 		public function playSound($name:String, $volume:Number = 1, $startTime:Number = 0, $loops:int = 0, $resumeTween:Boolean = true):void
 		{
 			var si:SoundItem = (_soundsDict[$name] as SoundItem);
-			si.play($startTime, $loops, $volume, $resumeTween);
 			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] of the sound to play is not added").getStackTrace());
+				return;
+			}
+			
+			si.play($startTime, $loops, $volume, $resumeTween);	
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_PLAY_START, si));
 		}
 		
@@ -331,6 +337,13 @@ package com.reintroducing.sound
 		public function pauseSound($name:String, $pauseTween:Boolean = true):void
 		{
 			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] of the sound to pause is not added").getStackTrace());
+				return;
+			}
+			
 			si.pause($pauseTween);
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_PAUSE, si));
@@ -346,6 +359,13 @@ package com.reintroducing.sound
 		public function stopSound($name:String):void
 		{
 			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] of the sound to stop is not added").getStackTrace());
+				return;
+			}
+			
 			si.stop();
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_STOP, si));
@@ -462,6 +482,13 @@ package com.reintroducing.sound
 		public function fadeSound($name:String, $targVolume:Number = 0, $fadeLength:Number = 1, $stopOnComplete:Boolean = false):void
 		{
 			var si:SoundItem = (_soundsDict[$name] as SoundItem);
+			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] of the sound to fade is not added").getStackTrace());
+				return;
+			}
+			
 			si.addEventListener(SoundManagerEvent.SOUND_ITEM_FADE_COMPLETE, handleFadeComplete);
 			si.fade($targVolume, $fadeLength, $stopOnComplete);
 			
@@ -529,6 +556,12 @@ package com.reintroducing.sound
 		 */
 		public function setSoundVolume($name:String, $volume:Number):void
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return;
+			}
+			
 			(_soundsDict[$name] as SoundItem).setVolume($volume);
 		}
 		
@@ -541,6 +574,12 @@ package com.reintroducing.sound
 		 */
 		public function getSoundVolume($name:String):Number
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
 			return (_soundsDict[$name] as SoundItem).channel.soundTransform.volume;
 		}
 		
@@ -553,6 +592,12 @@ package com.reintroducing.sound
 		 */
 		public function getSoundPosition($name:String):Number
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
 			return (_soundsDict[$name] as SoundItem).channel.position;
 		}
 		
@@ -565,6 +610,12 @@ package com.reintroducing.sound
 		 */
 		public function getSoundDuration($name:String):Number
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
 			return (_soundsDict[$name] as SoundItem).sound.length;
 		}
 		
@@ -577,6 +628,12 @@ package com.reintroducing.sound
 		 */
 		public function getSoundItem($name:String):SoundItem
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return null;
+			}
+			
 			return (_soundsDict[$name] as SoundItem);
 		}
 		
@@ -589,6 +646,12 @@ package com.reintroducing.sound
 		 */
 		public function isSoundPaused($name:String):Boolean
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return false;
+			}
+			
 			return (_soundsDict[$name] as SoundItem).paused;
 		}
 		
@@ -601,6 +664,11 @@ package com.reintroducing.sound
 		 */
 		public function isSoundPausedByAll($name:String):Boolean
 		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return false;
+			}
 			return (_soundsDict[$name] as SoundItem).pausedByAll;
 		}
 	
