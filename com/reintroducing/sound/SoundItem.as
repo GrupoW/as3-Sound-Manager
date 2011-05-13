@@ -85,7 +85,7 @@ package com.reintroducing.sound
 			
 			if( $enablePitchBend )
 			{
-				channel = _pitchItem.play(0, $loops, new SoundTransform(volume) );
+				channel = _pitchItem.play(position, loops, new SoundTransform(volume) );
 			}
 			else
 			{

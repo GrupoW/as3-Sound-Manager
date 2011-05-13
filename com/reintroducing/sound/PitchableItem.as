@@ -70,6 +70,11 @@ package com.reintroducing.sound
 		public function play(startTime:Number=0, loops:int=0 , sndTransform:SoundTransform = null ):SoundChannel
 		{
 			_loops = loops;
+			
+			// figure out position to start here. 
+			// _mp3.length - milliseconds
+			// _mp3.bytesTotal -
+			// a sample is 32 bits. 32/8 = 4 bytes. 
 			return _sound.play(startTime, loops, sndTransform );
 		}
 		
