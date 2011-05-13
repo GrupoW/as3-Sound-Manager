@@ -588,7 +588,7 @@ package com.reintroducing.sound
 			SoundItem(_soundsDict[$name]).channel.soundTransform.pan = $pan;
 		}
 		
-		public function getSoundPan():Number
+		public function getSoundPan( $name:String ):Number
 		{
 			
 			if(_soundsDict[$name] == null ) {
