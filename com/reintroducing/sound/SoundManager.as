@@ -1,17 +1,17 @@
 package com.reintroducing.sound 
 {
-	import com.reintroducing.events.SoundManagerEvent;	
-
-	import flash.events.Event;	
-	import flash.events.EventDispatcher;	
-	import flash.events.IOErrorEvent;	
-	import flash.events.ProgressEvent;	
-	import flash.media.Sound;	
-	import flash.media.SoundLoaderContext;	
-	import flash.media.SoundTransform;	
-	import flash.net.URLRequest;	
-	import flash.utils.Dictionary;	
-	import flash.utils.getDefinitionByName;	
+	import com.reintroducing.events.SoundManagerEvent;
+	
+	import flash.events.Event;
+	import flash.events.EventDispatcher;
+	import flash.events.IOErrorEvent;
+	import flash.events.ProgressEvent;
+	import flash.media.Sound;
+	import flash.media.SoundLoaderContext;
+	import flash.media.SoundTransform;
+	import flash.net.URLRequest;
+	import flash.utils.Dictionary;
+	import flash.utils.getDefinitionByName;
 	import flash.utils.getQualifiedClassName;
 
 	/**
@@ -569,6 +569,37 @@ package com.reintroducing.sound
 			
 			return (_soundsDict[$name] as SoundItem).channel.soundTransform.volume;
 		}
+		
+		/**
+		 * Sets the pan for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @param $pan The left-to-right panning of the sound, ranging from -1 (full pan left) to 1 (full pan right).
+		 * 
+		 */
+		public function setSoundPan( $name:String, $pan:Number ):void
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return;
+			}
+			
+			SoundItem(_soundsDict[$name]).channel.soundTransform.pan = $pan;
+		}
+		
+		public function getSoundPan():Number
+		{
+			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
+			return SoundItem(_soundsDict[$name]).channel.soundTransform.pan;
+		}
+		
 
 		/**
 		 * Gets the position of the specified sound.
