@@ -584,8 +584,9 @@ package com.reintroducing.sound
 				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
 				return;
 			}
-			
-			SoundItem(_soundsDict[$name]).channel.soundTransform.pan = $pan;
+			var soundTransform:SoundTransform = SoundItem(_soundsDict[$name]).channel.soundTransform;
+			soundTransform.pan = $pan;
+			SoundItem(_soundsDict[$name]).channel.soundTransform = soundTransform;
 		}
 		
 		public function getSoundPan( $name:String ):Number
