@@ -78,6 +78,7 @@ package com.reintroducing.sound
 		private static var _allowInstance:Boolean;
 
 		private var _soundsDict:Dictionary;
+		private var _playlistDict:Dictionary;
 		private var _areAllMuted:Boolean;
 		private var _tempExternalSoundItem:SoundItem;
 
@@ -101,6 +102,8 @@ package com.reintroducing.sound
 		public function SoundManager()
 		{
 			this._soundsDict = new Dictionary(true);
+			this._playlistDict = new Dictionary(true);
+			
 				if (!_allowInstance) {
 				throw new Error("Error: Use SoundManager.getInstance() instead of the new keyword.");
 			}
@@ -270,6 +273,112 @@ package com.reintroducing.sound
 			_soundsDict = new Dictionary(true);
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.REMOVED_ALL));
+		}
+		
+		
+		/**
+		 * Creates a new playlist object
+		 * 
+		 * @param $name The string identifier of the playlist. 
+		 * 
+		 */
+		public function createPlaylist( $name:String ):void
+		{
+			if( _playlistDict[$name] != null )
+			{
+				trace( new Error( "Playlist [" + $name + "] already exists.\n" ).getStackTrace() );
+				return;
+			}
+			
+			var pi:PlaylistItem = new PlaylistItem( $name );
+			_playlistDict[$name] = pi;
+		}
+		
+		public function removePlaylist( $name:String ):void
+		{
+			if( _playlistDict[$name] == null )
+			{
+				trace( new Error( "Playlist [" + $name + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			delete( _playlistDict[$name] );
+		}
+		
+		/**
+		 * Adds a sound to a playlist. 
+		 * 
+		 * @param playlistName The string representation of the playlist.
+		 * @param soundName The string rep for the sound to be added to the playlist.
+		 * @param multiple If set to true, the sound may exist in the playlist more then once.
+		 * 
+		 */
+		public function addSoundToPlaylist( $playlistName:String, $soundName:String, $multiple:Boolean = false ):void
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			if(_soundsDict[$soundName] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $soundName + "] of the sound to play is not added").getStackTrace());
+				return;
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			pl.addSound( $soundName, $multiple);
+		}
+		
+		/**
+		 * Removes sounds from a playlist.
+		 * 
+		 * @param playlistName The name of the playlist from which you want to remove a sound.
+		 * @param soundName The name of the sound you want to remove from the playlist. 
+		 * @param all Remove all instances of the sound from the playlist. Otherwise, removes the first sound.
+		 * 
+		 */
+		public function removeSoundFromPlaylist( $playlistName:String, $soundName:String, $all:Boolean = true ):void
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			if(_soundsDict[$soundName] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $soundName + "] of the sound to play is not added").getStackTrace());
+				return;
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			pl.removeSound( $soundName, $all );
+			
+		}
+		
+		/**
+		 * Returns the next sound in the playlist, or a random one. 
+		 * 
+		 * @param $playlistName The name of the playlist from which the next song should be found.
+		 * @param $random When true, a random song is picked. When false, the 'next' song is returned (in order of songs added). 
+		 * 
+		 * @returns The string name of the song. Returns an empty string if the playlist is empty. 
+		 */
+		public function getSoundFromPlaylist( $playlistName:String,  $random:Boolean = false ):String
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return "";
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			return pl.getSound( $random );
 		}
 
 		/**
