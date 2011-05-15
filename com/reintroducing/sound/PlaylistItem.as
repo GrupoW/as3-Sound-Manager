@@ -24,7 +24,7 @@ package com.reintroducing.sound
 		 * Adds a sound to this playlist. 
 		 * 
 		 * @param $soundName The string representation of the sound you want to add to this playlist
-		 * @param $multiple If you want to have this sound added to the playlist more then once. 
+		 * @param $multiple If you want to be able to have this sound added to the playlist more then once. 
 		 */
 		internal function addSound( $soundName:String, $multiple:Boolean = false ):void
 		{
