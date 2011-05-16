@@ -675,10 +675,10 @@ package com.reintroducing.sound
 			if(_soundsDict[$name] == null ) {
 				//silently fail
 				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
-				return 0;
+				return;
 			}
 			
-			SoundItem(_soundDict[$name]).pitch = $pitch;
+			SoundItem(_soundsDict[$name]).pitch = $pitch;
 			
 		}
 		
@@ -696,7 +696,7 @@ package com.reintroducing.sound
 				return 0;
 			}
 			
-			return SoundItem(_soundDict[$name]).pitch;
+			return SoundItem(_soundsDict[$name]).pitch;
 			
 		}
 		
