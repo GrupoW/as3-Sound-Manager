@@ -663,6 +663,44 @@ package com.reintroducing.sound
 			return (_soundsDict[$name] as SoundItem).channel.soundTransform.volume;
 		}
 		
+		
+		/**
+		 * Set the pitch for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @param $pitch The pitch value to set. 1.0 is "normal" pitch.
+		 */
+		public function setSoundPitch( $name:String, $pitch:Number = 1.0 ):void
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
+			SoundItem(_soundDict[$name]).pitch = $pitch;
+			
+		}
+		
+		/**
+		 * Gets the pitch for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @return The pitch value for the song. 
+		 */
+		public function getSoundPitch( $name:String ):Number
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
+			return SoundItem(_soundDict[$name]).pitch;
+			
+		}
+		
+		
 		/**
 		 * Sets the pan for the specified sound.
 		 * 
