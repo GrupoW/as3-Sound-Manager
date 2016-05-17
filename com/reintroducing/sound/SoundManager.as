@@ -1,17 +1,17 @@
 package com.reintroducing.sound 
 {
-	import com.reintroducing.events.SoundManagerEvent;	
-
-	import flash.events.Event;	
-	import flash.events.EventDispatcher;	
-	import flash.events.IOErrorEvent;	
-	import flash.events.ProgressEvent;	
-	import flash.media.Sound;	
-	import flash.media.SoundLoaderContext;	
-	import flash.media.SoundTransform;	
-	import flash.net.URLRequest;	
-	import flash.utils.Dictionary;	
-	import flash.utils.getDefinitionByName;	
+	import com.reintroducing.events.SoundManagerEvent;
+	
+	import flash.events.Event;
+	import flash.events.EventDispatcher;
+	import flash.events.IOErrorEvent;
+	import flash.events.ProgressEvent;
+	import flash.media.Sound;
+	import flash.media.SoundLoaderContext;
+	import flash.media.SoundTransform;
+	import flash.net.URLRequest;
+	import flash.utils.Dictionary;
+	import flash.utils.getDefinitionByName;
 	import flash.utils.getQualifiedClassName;
 
 	/**
@@ -78,7 +78,7 @@ package com.reintroducing.sound
 		private static var _allowInstance:Boolean;
 
 		private var _soundsDict:Dictionary;
-		private var _sounds:Array;
+		private var _playlistDict:Dictionary;
 		private var _areAllMuted:Boolean;
 		private var _tempExternalSoundItem:SoundItem;
 
@@ -102,8 +102,9 @@ package com.reintroducing.sound
 		public function SoundManager()
 		{
 			this._soundsDict = new Dictionary(true);
-			this._sounds = [];
-			if (!_allowInstance) {
+			this._playlistDict = new Dictionary(true);
+			
+				if (!_allowInstance) {
 				throw new Error("Error: Use SoundManager.getInstance() instead of the new keyword.");
 			}
 		}
@@ -115,11 +116,7 @@ package com.reintroducing.sound
 		private function registerSound($linkageID:*, $preloadedSound:Sound, $path:String, $name:String, $buffer:Number = 1000, $checkPolicyFile:Boolean = false):Boolean
 		{
 			// check to see if sound already exists by the specified name
-			var len:int = _sounds.length;
-			
-			for (var i:int = 0;i < len;i++) {
-				if ((_sounds[i] as SoundItem).name == $name) return false;
-			}
+			if( _soundsDict[$name] != null ) return false;
 			
 			// sound doesn't exist yet, go ahead and create it
 			var si:SoundItem = new SoundItem();
@@ -154,7 +151,6 @@ package com.reintroducing.sound
 			si.addEventListener(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, handleSoundPlayComplete);
 			
 			_soundsDict[$name] = si;
-			_sounds.push(si);
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_ADDED, si));
 			
@@ -238,25 +234,21 @@ package com.reintroducing.sound
 		 */
 		public function removeSound($name:String):void
 		{
-			var len:int = _sounds.length;
 			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				si = (_sounds[i] as SoundItem);
-				
-				if (si.name == $name) {
-					si.sound.removeEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
-					si.sound.removeEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
-					si.sound.removeEventListener(Event.COMPLETE, onSoundLoadComplete);
-					si.removeEventListener(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, handleSoundPlayComplete);
-					si.destroy();
-					
-					_sounds.splice(i, 1);
-					
-					break;
-				}
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] of the sound to play is not added").getStackTrace());
+				return;
 			}
 			
+			si = _soundsDict[$name] as SoundItem;
+			si.sound.removeEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
+			si.sound.removeEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
+			si.sound.removeEventListener(Event.COMPLETE, onSoundLoadComplete);
+			si.removeEventListener(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, handleSoundPlayComplete);
+			si.destroy();
+		
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_REMOVED, (_soundsDict[$name] as SoundItem)));
 			
 			delete (_soundsDict[$name] as SoundItem);
@@ -269,20 +261,124 @@ package com.reintroducing.sound
 		 */
 		public function removeAllSounds():void
 		{
-			var len:int = _sounds.length;
 			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				si = (_sounds[i] as SoundItem);
+			for each( si in _soundsDict )
+			{
 				si.sound.removeEventListener(IOErrorEvent.IO_ERROR, onSoundLoadError);
 				si.sound.removeEventListener(ProgressEvent.PROGRESS, onSoundLoadProgress);
 				si.sound.removeEventListener(Event.COMPLETE, onSoundLoadComplete);
 			}
 			
-			_sounds = [];
 			_soundsDict = new Dictionary(true);
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.REMOVED_ALL));
+		}
+		
+		
+		/**
+		 * Creates a new playlist object
+		 * 
+		 * @param $name The string identifier of the playlist. 
+		 * 
+		 */
+		public function createPlaylist( $name:String ):void
+		{
+			if( _playlistDict[$name] != null )
+			{
+				trace( new Error( "Playlist [" + $name + "] already exists.\n" ).getStackTrace() );
+				return;
+			}
+			
+			var pi:PlaylistItem = new PlaylistItem( $name );
+			_playlistDict[$name] = pi;
+		}
+		
+		public function removePlaylist( $name:String ):void
+		{
+			if( _playlistDict[$name] == null )
+			{
+				trace( new Error( "Playlist [" + $name + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			delete( _playlistDict[$name] );
+		}
+		
+		/**
+		 * Adds a sound to a playlist. 
+		 * 
+		 * @param playlistName The string representation of the playlist.
+		 * @param soundName The string rep for the sound to be added to the playlist.
+		 * @param multiple If set to true, the sound may exist in the playlist more then once.
+		 * 
+		 */
+		public function addSoundToPlaylist( $playlistName:String, $soundName:String, $multiple:Boolean = false ):void
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			if(_soundsDict[$soundName] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $soundName + "] of the sound to play is not added").getStackTrace());
+				return;
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			pl.addSound( $soundName, $multiple);
+		}
+		
+		/**
+		 * Removes sounds from a playlist.
+		 * 
+		 * @param playlistName The name of the playlist from which you want to remove a sound.
+		 * @param soundName The name of the sound you want to remove from the playlist. 
+		 * @param all Remove all instances of the sound from the playlist. Otherwise, removes the first sound.
+		 * 
+		 */
+		public function removeSoundFromPlaylist( $playlistName:String, $soundName:String, $all:Boolean = true ):void
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return
+			}
+			
+			if(_soundsDict[$soundName] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $soundName + "] of the sound to play is not added").getStackTrace());
+				return;
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			pl.removeSound( $soundName, $all );
+			
+		}
+		
+		/**
+		 * Returns the next sound in the playlist, or a random one. 
+		 * 
+		 * @param $playlistName The name of the playlist from which the next song should be found.
+		 * @param $random When true, a random song is picked. When false, the 'next' song is returned (in order of songs added). 
+		 * 
+		 * @returns The string name of the song. Returns an empty string if the playlist is empty. 
+		 */
+		public function getSoundFromPlaylist( $playlistName:String,  $random:Boolean = false ):String
+		{
+			if( _playlistDict[$playlistName] == null )
+			{
+				trace( new Error( "Playlist [" + $playlistName + "] does not exist.\n").getStackTrace() );
+				return "";
+			}
+			
+			var pl:PlaylistItem = _playlistDict[$playlistName] as PlaylistItem;
+			
+			return pl.getSound( $random );
 		}
 
 		/**
@@ -385,18 +481,19 @@ package com.reintroducing.sound
 		 */
 		public function playAllSounds($resumeTweens:Boolean = true, $useCurrentlyPlayingOnly:Boolean = false):void
 		{
-			var len:int = _sounds.length;
+			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				var id:String = (_sounds[i] as SoundItem).name;
+			for each( si in _soundsDict )
+			{
+				var id:String = si.name;
 				
 				if ($useCurrentlyPlayingOnly) {
-					if ((_soundsDict[id] as SoundItem).pausedByAll) {
-						(_soundsDict[id] as SoundItem).pausedByAll = false;
-						playSound(id, (_soundsDict[id] as SoundItem).volume, 0, 0, $resumeTweens);
+					if (si.pausedByAll) {
+						si.pausedByAll = false;
+						playSound(id, si.volume, 0, 0, $resumeTweens);
 					}
 				} else {
-					playSound(id, (_soundsDict[id] as SoundItem).volume, 0, 0, $resumeTweens);
+					playSound(id, si.volume, 0, 0, $resumeTweens);
 				}
 			}
 			
@@ -413,14 +510,15 @@ package com.reintroducing.sound
 		 */
 		public function pauseAllSounds($pauseTweens:Boolean = true, $useCurrentlyPlayingOnly:Boolean = true):void
 		{
-			var len:int = _sounds.length;
+			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				var id:String = (_sounds[i] as SoundItem).name;
+			for each( si in _soundsDict )
+			{
+				var id:String = si.name;
 				
 				if ($useCurrentlyPlayingOnly) {
-					if (!(_soundsDict[id] as SoundItem).paused) {
-						(_soundsDict[id] as SoundItem).pausedByAll = true;
+					if (!si.paused) {
+						si.pausedByAll = true;
 						pauseSound(id, $pauseTweens);
 					}
 				} else {
@@ -440,14 +538,15 @@ package com.reintroducing.sound
 		 */
 		public function stopAllSounds($useCurrentlyPlayingOnly:Boolean = true):void
 		{
-			var len:int = _sounds.length;
+			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				var id:String = (_sounds[i] as SoundItem).name;
+			for each( si in _soundsDict )
+			{
+				var id:String = si.name;
 				
 				if ($useCurrentlyPlayingOnly) {
-					if (!(_soundsDict[id] as SoundItem).paused) {
-						(_soundsDict[id] as SoundItem).pausedByAll = true;
+					if (!si.paused) {
+						si.pausedByAll = true;
 						stopSound(id);
 					}
 				} else {
@@ -493,17 +592,14 @@ package com.reintroducing.sound
 		{
 			_areAllMuted = true;
 			
-			var len:int = _sounds.length;
-			var id:String;
 			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				id = (_sounds[i] as SoundItem).name;
-				si = (_soundsDict[id] as SoundItem);
+			for each( si in _soundsDict )
+			{
 				si.savedVolume = si.channel.soundTransform.volume;
 				si.muted = true;
 				
-				setSoundVolume(id, 0);
+				setSoundVolume( si.name, 0);
 			}
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.MUTE_ALL));
@@ -518,16 +614,13 @@ package com.reintroducing.sound
 		{
 			_areAllMuted = false;
 			
-			var len:int = _sounds.length;
-			var id:String;
 			var si:SoundItem;
 			
-			for (var i:int = 0;i < len;i++) {
-				id = (_sounds[i] as SoundItem).name;
-				si = (_soundsDict[id] as SoundItem);
+			for each( si in _soundsDict )
+			{
 				si.muted = false;
 				
-				setSoundVolume(id, si.savedVolume);
+				setSoundVolume( si.name, si.savedVolume);
 			}
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.UNMUTE_ALL));
@@ -569,6 +662,76 @@ package com.reintroducing.sound
 			
 			return (_soundsDict[$name] as SoundItem).channel.soundTransform.volume;
 		}
+		
+		
+		/**
+		 * Set the pitch for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @param $pitch The pitch value to set. 1.0 is "normal" pitch.
+		 */
+		public function setSoundPitch( $name:String, $pitch:Number = 1.0 ):void
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return;
+			}
+			
+			SoundItem(_soundsDict[$name]).pitch = $pitch;
+			
+		}
+		
+		/**
+		 * Gets the pitch for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @return The pitch value for the song. 
+		 */
+		public function getSoundPitch( $name:String ):Number
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
+			return SoundItem(_soundsDict[$name]).pitch;
+			
+		}
+		
+		
+		/**
+		 * Sets the pan for the specified sound.
+		 * 
+		 * @param $name The string identifier of the sound
+		 * @param $pan The left-to-right panning of the sound, ranging from -1 (full pan left) to 1 (full pan right).
+		 * 
+		 */
+		public function setSoundPan( $name:String, $pan:Number ):void
+		{
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return;
+			}
+			var soundTransform:SoundTransform = SoundItem(_soundsDict[$name]).channel.soundTransform;
+			soundTransform.pan = $pan;
+			SoundItem(_soundsDict[$name]).channel.soundTransform = soundTransform;
+		}
+		
+		public function getSoundPan( $name:String ):Number
+		{
+			
+			if(_soundsDict[$name] == null ) {
+				//silently fail
+				trace(new Error("The string identifier [" + $name + "] it's not added to SoundManager dictionary").getStackTrace());
+				return 0;
+			}
+			
+			return SoundItem(_soundsDict[$name]).channel.soundTransform.pan;
+		}
+		
 
 		/**
 		 * Gets the position of the specified sound.
@@ -726,7 +889,13 @@ package com.reintroducing.sound
 		 */
 		public function get sounds():Array
 		{
-			return _sounds;
+			var sounds:Array = new Array();
+			var si:SoundItem;
+			for each( si in _soundsDict )
+			{
+				sounds.push( si );
+			}
+			return sounds;
 		}
 
 		/**

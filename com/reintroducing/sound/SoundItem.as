@@ -4,13 +4,16 @@ package com.reintroducing.sound
 	import com.greensock.plugins.TweenPlugin;
 	import com.greensock.plugins.VolumePlugin;
 	import com.reintroducing.events.SoundManagerEvent;
-
+	
 	import flash.events.Event;
 	import flash.events.EventDispatcher;
+	import flash.events.SampleDataEvent;
 	import flash.media.Sound;
 	import flash.media.SoundChannel;
 	import flash.media.SoundTransform;
+	import flash.utils.ByteArray;
 	import flash.utils.getQualifiedClassName;
+	import flash.utils.getTimer;
 	
 	/**
  	 * @author Matt Przybylski [http://www.reintroducing.com]
@@ -21,8 +24,12 @@ package com.reintroducing.sound
 //- PRIVATE & PROTECTED VARIABLES -------------------------------------------------------------------------
 
 		private var _fadeTween:TweenLite;
-		private var _volume:Number;		//- PUBLIC & INTERNAL VARIABLES ---------------------------------------------------------------------------				public var name:String;
-		public var sound:Sound;		public var channel:SoundChannel;		public var position:int;		public var paused:Boolean;		public var savedVolume:Number;		public var startTime:Number;		public var loops:int;		public var pausedByAll:Boolean;		public var muted:Boolean;
+		private var _volume:Number;
+		// made into a getter & setter
+		private var _sound:Sound;
+		
+		// For pitch bending
+		private var _pitchItem:PitchableItem;		//- PUBLIC & INTERNAL VARIABLES ---------------------------------------------------------------------------				public var name:String;		public var channel:SoundChannel;		public var position:int;		public var paused:Boolean;		public var savedVolume:Number;		public var startTime:Number;		public var loops:int;		public var pausedByAll:Boolean;		public var muted:Boolean;
 		
 //- CONSTRUCTOR	-------------------------------------------------------------------------------------------
 	
@@ -61,10 +68,11 @@ package com.reintroducing.sound
 		 * @param $loops The number of times to loop the sound (default: 0)
 		 * @param $volume The volume to play the sound at (default: 1)
 		 * @param $resumeTween If the sound volume is faded and while fading happens the sound is stopped, this will resume that fade tween (default: true)
+		 * @param $enablePitchBend When enabled, the "rate" value is used to determine how the sound is "pitched" up and down. 
 		 * 
 		 * @return void
 		 */
-		public function play($startTime:Number = 0, $loops:int = 0, $volume:Number = 1, $resumeTween:Boolean = true):void		{
+		public function play($startTime:Number = 0, $loops:int = 0, $volume:Number = 1, $resumeTween:Boolean = true, $enablePitchBend:Boolean = false):void		{
 			if (!paused) return;
 			
 			volume = $volume;
@@ -75,7 +83,15 @@ package com.reintroducing.sound
 			
 			if (!paused) position = startTime;
 			
-			channel = sound.play(position, loops, new SoundTransform(volume));
+			if( $enablePitchBend )
+			{
+				channel = _pitchItem.play(position, loops, new SoundTransform(volume) );
+			}
+			else
+			{
+				channel = sound.play(position, loops, new SoundTransform(volume));
+			}
+			
 			channel.addEventListener(Event.SOUND_COMPLETE, handleSoundComplete);
 			paused = false;
 			
@@ -161,6 +177,7 @@ package com.reintroducing.sound
 		 */
 		private function handleSoundComplete($evt:Event):void
 		{
+			trace("-- handleSoundComplete", $evt);
 			stop();
 			
 			dispatchEvent(new SoundManagerEvent(SoundManagerEvent.SOUND_ITEM_PLAY_COMPLETE, this));
@@ -186,12 +203,37 @@ package com.reintroducing.sound
 		
 		/**		 *		 */		public function get fadeTween():TweenLite		{		    return _fadeTween;		}				/**		 *		 */		public function set fadeTween($val:TweenLite):void		{			if ($val == null) TweenLite.killTweensOf(this);						_fadeTween = $val;		}
 	
+		public function set pitch( $val:Number ):void
+		{
+			_pitchItem.rate = $val;
+		}
+		
+		public function get pitch():Number
+		{
+			return _pitchItem.rate;
+		}
+		
+		public function set sound( $val:Sound ):void
+		{
+			_sound = $val;
+			_pitchItem = new PitchableItem( _sound );
+			
+		}
+		public function get sound():Sound
+		{
+			return _sound;
+		}
+		
 //- HELPERS -----------------------------------------------------------------------------------------------
 	
 		override public function toString():String
 		{
 			return getQualifiedClassName(this);
 		}
+
+		
+//- PRIVATE FUNCTIONS -------------------------------------------------------------------------------------
+	
 	
 //- END CLASS ---------------------------------------------------------------------------------------------
 	}
